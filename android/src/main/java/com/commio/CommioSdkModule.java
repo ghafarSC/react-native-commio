@@ -264,7 +264,7 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
             public void onRinging(@NonNull Call call) {
                 activeCall = call;
                 if (CommioSdkModule.this.activeCallInvite != null) {
-                    sendEvent(CommioSdkModule.this.reactContext, "onIncomingCallRinging", null);
+//                    sendEvent(CommioSdkModule.this.reactContext, "onIncomingCallRinging", null);
                 } else {
                     sendEvent(CommioSdkModule.this.reactContext, "onOutgoingCallRinging", null);
                 }
@@ -277,7 +277,7 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
                 activeCall = call;
 
                 if (CommioSdkModule.this.activeCallInvite != null) {
-                    CommioSdkModule.this.sendEvent(
+                    sendEvent(
                             CommioSdkModule.this.reactContext, "onIncomingCallAnswered", null);
                 } else {
                     sendEvent(CommioSdkModule.this.reactContext, "onOutgoingCallAnswered", null);
@@ -301,7 +301,7 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
                 }
                 if (CommioSdkModule.this.activeCallInvite != null) {
                     WritableMap payload = getIncomingCallObject(CommioSdkModule.this.incomingCallPayload);
-                    CommioSdkModule.this.sendEvent(
+                    sendEvent(
                             CommioSdkModule.this.reactContext, "onIncomingCallHangup", payload);
                     CommioSdkModule.this.incomingCallPayload = null;
                 } else {
@@ -317,7 +317,7 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
                 Log.e(TAG, "onConnectFailure: " + callException.getLocalizedMessage());
                 if (CommioSdkModule.this.activeCallInvite != null) {
                     WritableMap payload = getIncomingCallObject(CommioSdkModule.this.incomingCallPayload);
-                    CommioSdkModule.this.sendEvent(
+                    sendEvent(
                             CommioSdkModule.this.reactContext, "onIncomingCallHangup", payload);
                     CommioSdkModule.this.incomingCallPayload = null;
                 } else {
@@ -349,7 +349,7 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
                 @Override
                 public void onCancelledCallInvite(@NonNull CancelledCallInvite cancelledCallInvite, @Nullable CallException callException) {
                     WritableMap payload = getIncomingCallObject(CommioSdkModule.this.incomingCallPayload);
-                    CommioSdkModule.this.sendEvent(
+                    sendEvent(
                             CommioSdkModule.this.reactContext, "onIncomingCallHangup", payload);
                     CommioSdkModule.this.incomingCallPayload = null;
                 }
