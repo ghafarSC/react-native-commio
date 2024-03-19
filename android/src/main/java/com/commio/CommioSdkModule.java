@@ -95,13 +95,13 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
     }
 
     Call.Listener callListener = callListener();
+    private String _fcmToken = "";
     private Call activeCall;
     private CallInvite activeCallInvite;
 
     public CommioSdkModule(ReactApplicationContext reactContext) {
         super(reactContext);
         this.reactContext = reactContext;
-//        this.voiceRTC = voiceRTC.getInstance();
         myAudioManager = (AudioManager) this.reactContext.getSystemService(Context.AUDIO_SERVICE);
     }
 
@@ -124,7 +124,7 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
         if (this.activeCallInvite != null) {
             this.activeCallInvite.accept(this.reactContext, callListener);
         } else {
-            Log.w(NAME, "Incoming call is not exist in incomingMap");
+            // Log.w(NAME, "Incoming call is not exist in incomingMap");
         }
     }
 
@@ -133,7 +133,7 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
         if (this.activeCallInvite != null) {
             this.activeCallInvite.reject(this.reactContext);
         } else {
-            Log.w(NAME, "Incoming call is not exist in incomingMap");
+            // Log.w(NAME, "Incoming call is not exist in incomingMap");
         }
     }
 
@@ -193,8 +193,7 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void disablePushNotification(String token) {
-//         this.commioRTC.disablePushNotification(token, this.reactContext);
-        Voice.unregister(token, Voice.RegistrationChannel.FCM, "", new UnregistrationListener() {
+        Voice.unregister(token, Voice.RegistrationChannel.FCM, this._fcmToken, new UnregistrationListener() {
             @Override
             public void onUnregistered(String accessToken, String fcmToken) {
                 Log.i(TAG, "onUnregistered: ");
@@ -209,18 +208,8 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void registerAndroidPushNotification(String fcmToken, String rtcToken, String pushConfigId) {
-//         this.commioRTC.enablePushNotification(rtcToken, this.reactContext, pushConfigId);
-        Log.i(TAG, "registerAndroidPushNotification: " + rtcToken);
+        this._fcmToken = fcmToken;
         Voice.register(rtcToken, Voice.RegistrationChannel.FCM, fcmToken, new RegistrationListener() {
-            //            @Override
-//            public void onRegistered(@NonNull String accessToken, @NonNull String fcmToken) {
-//                Log.i(TAG, "onRegistered: Success");
-//            }
-//
-//            @Override
-//            public void onError(@NonNull RegistrationException registrationException, @NonNull String accessToken, @NonNull String fcmToken) {
-//                Log.e(TAG, "on register Error: " + registrationException.getMessage());
-//            }
             @Override
             public void onRegistered(@NonNull String accessToken, @NonNull String fcmToken) {
                 Log.d(TAG, "Successfully registered FCM " + fcmToken);
@@ -236,14 +225,12 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
                         error.getErrorCode(),
                         error.getMessage());
                 Log.e(TAG, message);
-//                Snackbar.make(coordinatorLayout, message, Snackbar.LENGTH_LONG).show();
             }
         });
     }
 
     @ReactMethod
     public void call(String apiKey, String token, String environment, String identity, String contactId, String to, String caller) {
-//        Log.i(TAG, "testMethod: " + token);
         HashMap<String, String> params = new HashMap<>();
         params.put("To", to);
         params.put("From", caller);
@@ -354,12 +341,6 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
                     CommioSdkModule.this.incomingCallPayload = null;
                 }
             });
-
-//            if (this.commioRTC.isIncomingApplicationCall(payload) && CommioSdkModule.this.incomingCallPayload == null) {
-//                //        if (this.commioRTC.isIncomingApplicationCall(payload)) {
-//                this.incomingCallPayload = payload;
-//                this.commioRTC.handleIncomingApplicationCall(payload, this.reactContext, this);
-//            }
         } catch (Exception e) {
             Log.d(TAG, "handleIncomingCall: " + e.getMessage());
         }
