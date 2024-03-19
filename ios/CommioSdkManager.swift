@@ -3,28 +3,21 @@ import AVFAudio
 import PushKit
 import Foundation
 import TwilioVoice
-// import InfobipRTC
 
 typealias IncomingCompletion = ()->Void
 
 @objc(CommioSdkManager)
 
-//final class CommioSdkManager: RCTEventEmitter, PhoneCallEventListener, IncomingApplicationCallEventListener{
 final class CommioSdkManager: RCTEventEmitter{
+    
     var identity: String {
         return UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
     }
     static var pushCredentials: PKPushCredentials?
-    //    static var voipToken: String?
     static var isUserLoggedIn: Bool = false
+    static var isAppKilled: Bool = false
     static var incomingPayload: PKPushPayload?
     var incomingCompletion: IncomingCompletion?
-    
-    //     var voiceRTC: InfobipRTC {
-    //         get {
-    //             return getInfobipRTCInstance()
-    //         }
-    //     }
     
     let audioDeviceManager = AudioDeviceManager()
     
@@ -34,13 +27,7 @@ final class CommioSdkManager: RCTEventEmitter{
         CommioSdkManager.shared = self
     }
     
-    
     private var hasListeners : Bool = false
-    //    var outgoingCall: ApplicationCall?
-    //    var incomingApplicationCall: IncomingApplicationCall?
-    
-    var activeCallInvites: [String: CallInvite]! = [:]
-    var activeCalls: [String: Call]! = [:]
     
     // activeCall represents the last connected call
     var activeCall: Call? = nil
@@ -91,29 +78,14 @@ final class CommioSdkManager: RCTEventEmitter{
     @objc func call(_ apiKey: String, token: String, environment: String, identity: String, contactId: String, destination: String, caller: String) {
         AVAudioSession.sharedInstance().requestRecordPermission { granted in
             if(granted){
-                // Make call with Twillio here...
                 let connectOptions = ConnectOptions(accessToken: token) { builder in
-                                        builder.params = ["twimlParamTo": destination ]
-//                    builder.params = ["To": destination ]
-                    builder.params = ["From": caller ]
-                    //                    builder.uuid = UUID(uuidString: identity)
+                    builder.params = ["To": destination, "From": caller ]
+                    builder.uuid = UUID(uuidString: environment)
                 }
                 
                 print("Twillio -- call --")
                 let call = TwilioVoiceSDK.connect(options: connectOptions, delegate: CommioSdkManager.shared!)
                 CommioSdkManager.shared!.activeCall = call
-                //                CommioSdkManager.shared!.activeCalls[call.uuid!.uuidString] = call
-                
-                //                 let callApplicationRequest = CallApplicationRequest(token, applicationId: environment, applicationCallEventListener: CommioSdkManager.shared!)
-                //
-                //                 let customData = ["contactId": contactId, "fromNumber": caller, "toNumber": destination]
-                //                 let applicationCallOptions = ApplicationCallOptions(audio: true, customData: customData, entityId: identity)
-                //
-                //                 do {
-                //                   CommioSdkManager.shared!.outgoingCall = try CommioSdkManager.shared!.infobipRTC.callApplication(callApplicationRequest, applicationCallOptions)
-                //                 } catch let ex {
-                //                   print("outgoingCall (error) ===> ", ex.localizedDescription);
-                //                 }
             }else{
                 print("Microphone permission not granted")
                 CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallHangup", body: "")
@@ -121,61 +93,59 @@ final class CommioSdkManager: RCTEventEmitter{
         }
     }
     
-    // func convertToDictionary(text: String) -> [String: Any]? {
-    //     if let data = text.data(using: .utf8) {
-    //         do {
-    //             return try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
-    //         } catch {
-    //             print(error.localizedDescription)
-    //         }
-    //     }
-    //     return nil
-    // }
-    
-    // func convertIncomingCallToObject(_ payload: PKPushPayload!) -> [String: Any] {
-    //     let objCall = payload.dictionaryPayload
-    
-    
-    //     let callId = objCall["callId"] as? String;
-    //     let callerName = objCall["displayName"] as? String;
-    //     let callerPhone = objCall["source"] as? String;
-    //     let customDataString = objCall["customData"] as? String ?? "";
-    
-    //     let customData = convertToDictionary(text: customDataString)
-    //     let contactId = customData?["contactId"] as? String ?? ""
-    
-    
-    //     let body: [String: Any] = [
-    //         "callId": callId ?? "",
-    //         "callerPhone": callerPhone ?? "",
-    //         "callerName": callerName ?? "",
-    //         "callerId": contactId ,
-    //     ];
-    
-    //     return body;
-    // }
-    
+    func convertToDictionary(text: String) -> [String: String]? {
+        var dictionary = [String: String]()
+        let pairs = text.components(separatedBy: "&")
+        for pair in pairs {
+            let keyValue = pair.components(separatedBy: "=")
+            if keyValue.count == 2 {
+                let key = keyValue[0]
+                let value = keyValue[1].replacingOccurrences(of: "+", with: " ")
+                dictionary[key] = value
+            }
+        }
+        return dictionary.isEmpty ? nil : dictionary
+    }
+
+    func convertIncomingCallToObject(_ payload: PKPushPayload!) -> [String: Any] {
+        guard let objCall = payload.dictionaryPayload as? [String: Any],
+//              let callId = objCall["twi_call_sid"] as? String,
+              let callerPhone = objCall["twi_from"] as? String,
+              let customDataString = objCall["twi_params"] as? String else {
+            return [:] // Return empty dictionary if any required key is missing
+        }
+
+        let customData = convertToDictionary(text: customDataString)
+        let contactId = customData?["contactId"] ?? ""
+        let callerName = customData?["callerName"] ?? ""
+
+        let body: [String: Any] = [
+//            "callId": callId,
+            "callId": contactId,
+            "callerPhone": callerPhone,
+            "callerName": callerName,
+            "callerId": contactId,
+            "shouldDisplayCallUI": false,
+        ]
+
+        return body
+    }
     
     @objc func handleIncomingCallFromCallKeep() {
-        // let payload = CommioSdkManager.incomingPayload
-        // if CommioSdkManager.shared!.infobipRTC.isIncomingApplicationCall(payload!) {
-        
-        //     CommioSdkManager.incomingPayload = payload
-        //     CommioSdkManager.shared?.infobipRTC.handleIncomingApplicationCall(payload!, CommioSdkManager.shared!)
-        // }
+        let payload = CommioSdkManager.incomingPayload
+        CommioSdkManager.shared?.incomingCompletion = nil
+        if payload != nil {
+            TwilioVoiceSDK.handleNotification(payload: payload!.dictionaryPayload, delegate: CommioSdkManager.shared!, delegateQueue: nil, callMessageDelegate: nil)
+        }
     }
     @objc static func setPushPayload(_ payload: PKPushPayload) {
         CommioSdkManager.incomingPayload = payload
-        
     }
     
     @objc static func handleIncomingCall(_ payload: PKPushPayload, completion: @escaping IncomingCompletion) {
-        // CommioSdkManager.shared?.incomingCompletion = completion
-        // if ((CommioSdkManager.shared?.infobipRTC.isIncomingApplicationCall(payload)) != nil) {
-        
-        //     CommioSdkManager.incomingPayload = payload
-        //     shared?.infobipRTC.handleIncomingApplicationCall(payload, shared!)
-        // }
+        CommioSdkManager.shared?.incomingCompletion = completion
+        CommioSdkManager.incomingPayload = payload
+        TwilioVoiceSDK.handleNotification(payload: payload.dictionaryPayload, delegate: shared!, delegateQueue: nil, callMessageDelegate: nil)
     }
     
     @objc func answer() {
@@ -183,44 +153,35 @@ final class CommioSdkManager: RCTEventEmitter{
             let acceptOptions = AcceptOptions(callInvite: incomingCall) { builder in
                 builder.uuid = incomingCall.uuid
             }
-            
             let call = incomingCall.accept(options: acceptOptions, delegate: self)
             CommioSdkManager.shared!.activeCall = call;
         }
     }
     
     @objc func reject() {
+        if let ongoingCall = CommioSdkManager.shared?.activeCall {
+            ongoingCall.disconnect();
+        }
         if let incomingCall = CommioSdkManager.shared?.activeCallInvite {
-            incomingCall.reject()
+            incomingCall.reject();
         }
     }
     
     @objc func mute() {
         if let outgoingCall = CommioSdkManager.shared!.activeCall {
             outgoingCall.isMuted = true;
-        }else if let incomingCall = CommioSdkManager.shared!.activeCallInvite {
-            print("Not able to mute incoming call")
-            //             do {
-            //                 try incomingCall.mute(true)
-            //             } catch _ {
-            //
-            //             }
         }
     }
     
     @objc func unmute() {
         if let outgoingCall = CommioSdkManager.shared!.activeCall {
             outgoingCall.isMuted = false;
-        }else if let incomingCall = CommioSdkManager.shared!.activeCallInvite {
-            print("Not able to mute incoming call")
         }
     }
     
     @objc func hangup() {
         if let outgoingCall = CommioSdkManager.shared!.activeCall {
             outgoingCall.disconnect()
-        } else if let incomingCall = CommioSdkManager.shared!.activeCallInvite {
-            print("Not able to hangup incoming call")
         }
     }
     
@@ -231,7 +192,6 @@ final class CommioSdkManager: RCTEventEmitter{
     @objc func disablePushNotification(_ token: String) {
         print("Logout success! --- disablePushNotification --- ")
         CommioSdkManager.isUserLoggedIn = false;
-        //         CommioSdkManager.shared?.infobipRTC.disablePushNotification(token)
         TwilioVoiceSDK.unregister(accessToken: token, deviceToken: CommioSdkManager.pushCredentials!.token) { error in
             if let error = error {
                 print("An error occurred while unregistering: \(error.localizedDescription)")
@@ -244,14 +204,7 @@ final class CommioSdkManager: RCTEventEmitter{
     @objc func registerPushNotification(_ token: String, pushConfigId: String) {
         if let credentials = CommioSdkManager.pushCredentials{
             CommioSdkManager.isUserLoggedIn = true;
-            //             CommioSdkManager.shared?.infobipRTC.enablePushNotification(token, pushCredentials: credentials, debug: isDebug(), pushConfigId: pushConfigId) { result in
-            //                 print("enablePushNotification result : \(result.status)")
-            //                 print("enablePushNotification result : \(result.message)")
-            //
-            //             }
-            /*
-             * Perform registration if a new device token is detected.
-             */
+
             TwilioVoiceSDK.register(accessToken: token, deviceToken: credentials.token) { error in
                 if let error = error {
                     print("An error occurred while registering: \(error.localizedDescription)")
@@ -268,17 +221,6 @@ final class CommioSdkManager: RCTEventEmitter{
         CommioSdkManager.pushCredentials = credentials
     }
     
-    //    func onIncomingApplicationCall(_ incomingApplicationCallEvent: IncomingApplicationCallEvent) {
-    // let body = convertIncomingCallToObject(CommioSdkManager.incomingPayload)
-    // CommioSdkManager.shared?.sendEvent(withName: "onIncomingCall", body: body);
-    
-    // CommioSdkManager.shared?.incomingApplicationCall = incomingApplicationCallEvent.incomingApplicationCall
-    // if let block = CommioSdkManager.shared?.incomingCompletion {
-    //     block()
-    // }
-    // CommioSdkManager.shared?.incomingApplicationCall!.applicationCallEventListener = WebrtcCallListener(CommioSdkManager.shared!.incomingApplicationCall!)
-    //    }
-    
     @objc func isDebug() -> Bool {
 #if DEBUG
         return true
@@ -292,131 +234,77 @@ final class CommioSdkManager: RCTEventEmitter{
 extension CommioSdkManager: CallDelegate {
     
     func callDidStartRinging(call: Call) {
-        print("callDidStartRinging \(call.sid)")
-        CommioSdkManager.shared?.audioDeviceManager.isBluetoothDeviceConnected()
-        CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallRinging", body: "");
+//        print("callDidStartRinging \(call.sid)")
+        if CommioSdkManager.shared!.activeCallInvite != nil {
+//            CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallRinging", body: "");
+        } else {
+            CommioSdkManager.shared?.audioDeviceManager.isBluetoothDeviceConnected()
+            CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallRinging", body: "");
+        }
     }
     func callDidConnect(call: Call) {
-        print("callDidConnect")
+//        print("callDidConnect")
+        if CommioSdkManager.shared!.activeCallInvite != nil {
+            CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallAnswered", body: "");
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                CommioSdkManager.shared?.audioDeviceManager.isBluetoothDeviceConnected()
+            }
+        } else {
+            CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallAnswered", body: "");
+        }
     }
     
     func callDidFailToConnect(call: Call, error: Error) {
-        print("callDidFailToConnect: \(error.localizedDescription)")
-        CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallHangup", body: "")
+//        print("callDidFailToConnect: \(error.localizedDescription)")
+        
+        if CommioSdkManager.shared!.activeCallInvite != nil {
+            let body = CommioSdkManager.shared?.convertIncomingCallToObject(CommioSdkManager.incomingPayload)
+            CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallHangup", body: body)
+        } else {
+            CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallHangup", body: "")
+        }
+        CommioSdkManager.shared!.activeCallInvite = nil;
+        CommioSdkManager.shared!.activeCall = nil;
     }
     
     func callDidDisconnect(call: Call, error: Error?) {
-        print("callDidDisconnect: \(error?.localizedDescription)")
-        CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallHangup", body: "")
+//        print("callDidDisconnect: \(error?.localizedDescription)")
+        if CommioSdkManager.shared!.activeCallInvite != nil {
+            let body = CommioSdkManager.shared?.convertIncomingCallToObject(CommioSdkManager.incomingPayload)
+            CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallHangup", body: body)
+        } else {
+            CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallHangup", body: "")
+        }
+        CommioSdkManager.shared!.activeCallInvite = nil;
+        CommioSdkManager.shared!.activeCall = nil;
     }
 }
 
-
-
-// extension CommioSdkManager: WebrtcCallEventListener, ApplicationCallEventListener {
-//     func onEarlyMedia(_ callEarlyMediaEvent: CallEarlyMediaEvent) {
-//         print("callEarlyMediaEvent triggered ==> ", callEarlyMediaEvent)
-//         CommioSdkManager.shared?.audioDeviceManager.isBluetoothDeviceConnected()
-//         CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallRinging", body: "");
-//     }
-
-//     func onEstablished(_ callEstablishedEvent: CallEstablishedEvent) {
-//         CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallAnswered", body: "");
-//     }
-
-//     func onHangup(_ callHangupEvent: CallHangupEvent) {
-//         CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallHangup", body: "")
-//     }
-
-//     func onError(_ errorEvent: ErrorEvent) {
-//         CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallInvalid", body: "");
-//     }
-// }
-
-// extension CommioSdkManager: IncomingCallEventListener {
-
-//     func onIncomingWebrtcCall(_ incomingWebrtcCallEvent: IncomingWebrtcCallEvent) {
-//         //        self.incomingWebrtcCall = incomingWebrtcCallEvent.incomingWebrtcCall
-//         //        self.incomingWebrtcCall!.webrtcCallEventListener = WebrtcCallListener(self.incomingWebrtcCall!)
-//     }
-
-// }
+extension CommioSdkManager: NotificationDelegate {
+    func callInviteReceived(callInvite: CallInvite) {
+        CommioSdkManager.shared!.activeCallInvite = callInvite;
+        
+        let body = convertIncomingCallToObject(CommioSdkManager.incomingPayload)
+        CommioSdkManager.shared?.sendEvent(withName: "onIncomingCall", body: body);
+        
+        if let block = CommioSdkManager.shared?.incomingCompletion {
+            block()
+        }
+    }
+    
+    func cancelledCallInviteReceived(cancelledCallInvite: CancelledCallInvite, error: Error) {
+//        NSLog("cancelledCallInviteCanceled:error:, error: \(error.localizedDescription)")
+        
+        let body = convertIncomingCallToObject(CommioSdkManager.incomingPayload)
+        CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallHangup", body: body)
+        
+        CommioSdkManager.shared!.activeCallInvite = nil;
+        CommioSdkManager.shared!.activeCall = nil;
+    }
+}
 
 extension CommioSdkManager: AudioDeviceManagerDelegate {
     func didChangeHeadphonesState(connected: Bool) {
-        // sendEvent(withName: "headphonesStateChanged", body: ["connected": connected])
+         sendEvent(withName: "headphonesStateChanged", body: ["connected": connected])
     }
 }
-
-// @objc(WebrtcCallListener)
-
-// class WebrtcCallListener: RCTEventEmitter, ApplicationCallEventListener{
-//     func onRinging(_ callRingingEvent: CallRingingEvent) {
-//         print("incoming call on ringing")
-//     }
-
-//     func onEstablished(_ callEstablishedEvent: CallEstablishedEvent) {
-//         print("on call established...")
-//         CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallAnswered", body: "");
-//         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-//             CommioSdkManager.shared?.audioDeviceManager.isBluetoothDeviceConnected()
-//         }
-//     }
-
-//     func onHangup(_ callHangupEvent: CallHangupEvent) {
-//         print("incoming call hang up")
-//         let body = CommioSdkManager.shared?.convertIncomingCallToObject(CommioSdkManager.incomingPayload)
-//         //        sendEvent(withName: "onIncomingCallHangup", body: "")
-//         //        WebrtcCallListener.shared?.sendEvent(withName: "onIncomingCallHangup", body: "")
-//         CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallHangup", body: body)
-//     }
-
-//     let webrtcCall: IncomingApplicationCall
-
-//     static var shared: WebrtcCallListener?
-
-//     init(_ webrtcCall: IncomingApplicationCall) {
-//         self.webrtcCall = webrtcCall
-//         super.init()
-//         WebrtcCallListener.shared = self
-//     }
-
-
-//     override func supportedEvents() -> [String] {
-//         return [
-//             "onLogin",
-//             "onLoginFailed",
-//             "onLogout",
-//             "onIncomingCall",
-//             "onIncomingCallHangup",
-//             "onIncomingCallRejected",
-//             "onIncomingCallAnswered",
-//             "onIncomingCallInvalid",
-//             "onOutgoingCall",
-//             "onOutgoingCallAnswered",
-//             "onOutgoingCallRinging",
-//             "onOutgoingCallRejected",
-//             "onOutgoingCallHangup",
-//             "onOutgoingCallInvalid",
-//             "headphonesStateChanged"
-//         ]
-//     }
-
-//     private var hasListeners : Bool = false
-
-//     override func startObserving() {
-//         print("CommioSdk ReactNativeEventEmitter startObserving")
-
-//         hasListeners = true
-
-//         super.startObserving()
-//     }
-
-//     override func stopObserving() {
-//         print("CommioSdk ReactNativeEventEmitter stopObserving")
-
-//         hasListeners = false
-
-//         super.stopObserving()
-//     }
-// }
