@@ -32,6 +32,7 @@ final class CommioSdkManager: RCTEventEmitter{
     // activeCall represents the last connected call
     var activeCall: Call? = nil
     var activeCallInvite: CallInvite? = nil
+    var audioDevice = DefaultAudioDevice()
     
     static var shared: CommioSdkManager?
     
@@ -78,12 +79,15 @@ final class CommioSdkManager: RCTEventEmitter{
     @objc func call(_ apiKey: String, token: String, environment: String, identity: String, contactId: String, destination: String, caller: String) {
         AVAudioSession.sharedInstance().requestRecordPermission { granted in
             if(granted){
+                TwilioVoiceSDK.audioDevice = DefaultAudioDevice()
+                CommioSdkManager.shared?.audioDevice = TwilioVoiceSDK.audioDevice as! DefaultAudioDevice
                 let connectOptions = ConnectOptions(accessToken: token) { builder in
                     builder.params = ["To": destination, "From": caller ]
                     builder.uuid = UUID(uuidString: environment)
                 }
                 
                 print("Twillio -- call --")
+
                 let call = TwilioVoiceSDK.connect(options: connectOptions, delegate: CommioSdkManager.shared!)
                 CommioSdkManager.shared!.activeCall = call
             }else{
@@ -130,6 +134,23 @@ final class CommioSdkManager: RCTEventEmitter{
 
         return body
     }
+    
+    func toggleAudioRoute(toSpeaker: Bool) {
+            // The mode set by the Voice SDK is "VoiceChat" so the default audio route is the built-in receiver. Use port override to switch the route.
+        CommioSdkManager.shared?.audioDevice.block = {
+                do {
+                    if toSpeaker {
+                        try AVAudioSession.sharedInstance().overrideOutputAudioPort(.speaker)
+                    } else {
+                        try AVAudioSession.sharedInstance().overrideOutputAudioPort(.none)
+                    }
+                } catch {
+                    NSLog(error.localizedDescription)
+                }
+            }
+            
+        CommioSdkManager.shared?.audioDevice.block()
+        }
     
     @objc func handleIncomingCallFromCallKeep() {
         let payload = CommioSdkManager.incomingPayload
@@ -187,6 +208,7 @@ final class CommioSdkManager: RCTEventEmitter{
     
     @objc func setAudioDevice(_ device: Int) {
         CommioSdkManager.shared?.audioDeviceManager.setAudioDevice(type: device)
+        CommioSdkManager.shared?.toggleAudioRoute(toSpeaker: device == 0 ? false : true)
     }
     
     @objc func disablePushNotification(_ token: String) {
@@ -238,6 +260,7 @@ extension CommioSdkManager: CallDelegate {
         if CommioSdkManager.shared!.activeCallInvite != nil {
 //            CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallRinging", body: "");
         } else {
+            CommioSdkManager.shared?.audioDevice.isEnabled = true
             CommioSdkManager.shared?.audioDeviceManager.isBluetoothDeviceConnected()
             CommioSdkManager.shared?.sendEvent(withName: "onOutgoingCallRinging", body: "");
         }
@@ -246,7 +269,10 @@ extension CommioSdkManager: CallDelegate {
 //        print("callDidConnect")
         if CommioSdkManager.shared!.activeCallInvite != nil {
             CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallAnswered", body: "");
+//            CommioSdkManager.shared?.toggleAudioRoute(toSpeaker: true)
+            CommioSdkManager.shared?.audioDevice.isEnabled = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+//                CommioSdkManager.shared?.audioDevice.isEnabled = true
                 CommioSdkManager.shared?.audioDeviceManager.isBluetoothDeviceConnected()
             }
         } else {
@@ -256,6 +282,7 @@ extension CommioSdkManager: CallDelegate {
     
     func callDidFailToConnect(call: Call, error: Error) {
 //        print("callDidFailToConnect: \(error.localizedDescription)")
+        CommioSdkManager.shared?.audioDevice.isEnabled = false
         
         if CommioSdkManager.shared!.activeCallInvite != nil {
             let body = CommioSdkManager.shared?.convertIncomingCallToObject(CommioSdkManager.incomingPayload)
@@ -269,6 +296,7 @@ extension CommioSdkManager: CallDelegate {
     
     func callDidDisconnect(call: Call, error: Error?) {
 //        print("callDidDisconnect: \(error?.localizedDescription)")
+        CommioSdkManager.shared?.audioDevice.isEnabled = false
         if CommioSdkManager.shared!.activeCallInvite != nil {
             let body = CommioSdkManager.shared?.convertIncomingCallToObject(CommioSdkManager.incomingPayload)
             CommioSdkManager.shared?.sendEvent(withName: "onIncomingCallHangup", body: body)
