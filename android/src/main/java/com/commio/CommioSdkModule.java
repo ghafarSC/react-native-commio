@@ -130,7 +130,9 @@ public class CommioSdkModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void reject() {
-        if (this.activeCallInvite != null) {
+        if (this.activeCall != null) {
+            this.activeCall.disconnect();
+        } else if (this.activeCallInvite != null) {
             this.activeCallInvite.reject(this.reactContext);
         } else {
             // Log.w(NAME, "Incoming call is not exist in incomingMap");
