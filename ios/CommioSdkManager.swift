@@ -142,6 +142,7 @@ final class CommioSdkManager: RCTEventEmitter{
                     if toSpeaker {
                         try AVAudioSession.sharedInstance().overrideOutputAudioPort(.speaker)
                     } else {
+                        try AVAudioSession.sharedInstance().setCategory( .playAndRecord, mode: .voiceChat , options: .allowBluetooth)
                         try AVAudioSession.sharedInstance().overrideOutputAudioPort(.none)
                     }
                 } catch {

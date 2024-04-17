@@ -41,7 +41,8 @@ final class AudioDeviceManager {
             case .speaker:
                 try session.overrideOutputAudioPort(.speaker)
             case .phone:
-                try session.setCategory(.playAndRecord, mode: .voiceChat, options: [])
+//                try session.setCategory(.playAndRecord, mode: .voiceChat, options: [])
+                try session.setCategory(.playAndRecord, mode: .voiceChat, options: .allowBluetooth)
                 try session.overrideOutputAudioPort(.none)
             case .headphones:
                 try session.setCategory(.playAndRecord, mode: .voiceChat, options: .allowBluetooth)
